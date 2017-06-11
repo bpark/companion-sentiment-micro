@@ -15,8 +15,8 @@
  */
 package com.github.bpark.companion;
 
-import com.github.bpark.companion.codecs.IntegerArrayCodec;
-import com.github.bpark.companion.codecs.StringArrayCodec;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import io.vertx.rxjava.core.eventbus.Message;
@@ -48,17 +48,14 @@ public class SentimentVerticle extends AbstractVerticle {
     public void start() throws Exception {
         super.start();
 
-        this.vertx.eventBus().getDelegate().registerDefaultCodec(String[].class, new StringArrayCodec());
-        this.vertx.eventBus().getDelegate().registerDefaultCodec(Integer[].class, new IntegerArrayCodec());
-
         Map<String, Integer> sentimentMap = readSentimentFile();
 
         EventBus eventBus = vertx.eventBus();
 
-        MessageConsumer<String[]> consumer = eventBus.consumer(ADDRESS);
-        Observable<Message<String[]>> observable = consumer.toObservable();
+        MessageConsumer<String> consumer = eventBus.consumer(ADDRESS);
+        Observable<Message<String>> observable = consumer.toObservable();
         observable.subscribe(message -> {
-            String[] words = message.body();
+            String[] words = Json.decodeValue(message.body(), String[].class);
 
             logger.info("received words: {}", Arrays.asList(words));
 
@@ -71,7 +68,7 @@ public class SentimentVerticle extends AbstractVerticle {
 
             logger.info("sentiment weights: {}", result);
 
-            message.reply(result);
+            message.reply(new JsonArray(result));
         });
 
     }
