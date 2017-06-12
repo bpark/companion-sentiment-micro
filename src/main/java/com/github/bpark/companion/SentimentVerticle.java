@@ -16,7 +16,6 @@
 package com.github.bpark.companion;
 
 import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonArray;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.eventbus.EventBus;
 import io.vertx.rxjava.core.eventbus.Message;
@@ -29,7 +28,11 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -66,9 +69,13 @@ public class SentimentVerticle extends AbstractVerticle {
                 result.add(sentimentValue != null ? sentimentValue : 0);
             }
 
+            double average = result.stream().mapToInt(r -> r).average().orElse(0);
+
+            CalculatedSentiment calculatedSentiment = new CalculatedSentiment(average, result);
+
             logger.info("sentiment weights: {}", result);
 
-            message.reply(new JsonArray(result));
+            message.reply(Json.encode(calculatedSentiment));
         });
 
     }
