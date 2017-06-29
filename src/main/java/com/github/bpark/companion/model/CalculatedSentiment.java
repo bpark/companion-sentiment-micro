@@ -1,4 +1,4 @@
-package com.github.bpark.companion;
+package com.github.bpark.companion.model;
 
 import java.util.List;
 

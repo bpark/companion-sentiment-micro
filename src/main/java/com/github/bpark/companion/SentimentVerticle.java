@@ -15,6 +15,9 @@
  */
 package com.github.bpark.companion;
 
+import com.github.bpark.companion.input.AnalyzedText;
+import com.github.bpark.companion.model.CalculatedSentiment;
+import com.github.bpark.companion.model.SentimentAnalysis;
 import io.vertx.core.json.Json;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.eventbus.EventBus;
@@ -23,6 +26,7 @@ import io.vertx.rxjava.core.eventbus.MessageConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rx.Observable;
+import rx.Single;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -44,6 +48,9 @@ public class SentimentVerticle extends AbstractVerticle {
 
     private static final String ADDRESS = "sentiment.calculate";
 
+    private static final String NLP_KEY = "nlp";
+    private static final String SENTIMENT_KEY = "sentiment";
+
     private static final String TAB_SEP = "\t";
     private static final String MAPPING_FILE = "/AFINN-111.txt";
 
@@ -57,25 +64,34 @@ public class SentimentVerticle extends AbstractVerticle {
 
         MessageConsumer<String> consumer = eventBus.consumer(ADDRESS);
         Observable<Message<String>> observable = consumer.toObservable();
+
         observable.subscribe(message -> {
-            String[] words = Json.decodeValue(message.body(), String[].class);
 
-            logger.info("received words: {}", Arrays.asList(words));
+            String id = message.body();
 
-            List<Integer> result = new ArrayList<>();
+            readMessage(id).flatMap(content -> {
+                logger.info("text to analyze for sentences: {}", content);
 
-            for (String word : words) {
-                Integer sentimentValue = sentimentMap.get(word);
-                result.add(sentimentValue != null ? sentimentValue : 0);
-            }
+                List<CalculatedSentiment> calculatedSentiments = content.getSentences().stream().map(sentence -> {
+                    String[] words = sentence.getTokens();
 
-            double average = result.stream().mapToInt(r -> r).average().orElse(0);
+                    logger.info("received words: {}", Arrays.asList(words));
 
-            CalculatedSentiment calculatedSentiment = new CalculatedSentiment(average, result);
+                    List<Integer> result = new ArrayList<>();
 
-            logger.info("sentiment weights: {}", result);
+                    for (String word : words) {
+                        Integer sentimentValue = sentimentMap.get(word);
+                        result.add(sentimentValue != null ? sentimentValue : 0);
+                    }
 
-            message.reply(Json.encode(calculatedSentiment));
+                    double average = result.stream().mapToInt(r -> r).average().orElse(0);
+
+                    return new CalculatedSentiment(average, result);
+                }).collect(Collectors.toList());
+
+                return Observable.just(new SentimentAnalysis(calculatedSentiments));
+            }).flatMap(analyses -> saveMessage(id, analyses)).subscribe(a -> message.reply(id));;
+
         });
 
     }
@@ -92,6 +108,19 @@ public class SentimentVerticle extends AbstractVerticle {
 
             return sentimentMap;
         }
+    }
+
+    private Observable<AnalyzedText> readMessage(String id) {
+        return vertx.sharedData().<String, String>rxGetClusterWideMap(id)
+                .flatMap(map -> map.rxGet(NLP_KEY))
+                .flatMap(content -> Single.just(Json.decodeValue(content, AnalyzedText.class)))
+                .toObservable();
+    }
+
+    private Observable<Void> saveMessage(String id, SentimentAnalysis sentimentAnalysis) {
+        return vertx.sharedData().<String, String>rxGetClusterWideMap(id)
+                .flatMap(map -> map.rxPut(SENTIMENT_KEY, Json.encode(sentimentAnalysis)))
+                .toObservable();
     }
 
 }
