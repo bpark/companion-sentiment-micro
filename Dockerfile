@@ -9,4 +9,4 @@ RUN chmod 777 /app/
 
 WORKDIR /app/
 ENTRYPOINT ["sh", "-c"]
-CMD ["exec java -jar $JAVA_APP_JAR -cluster"]
+CMD ["exec java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:+PrintNMTStatistics $JAVA_OPTIONS -jar $JAVA_APP_JAR -cluster"]
